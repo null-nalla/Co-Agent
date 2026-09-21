@@ -1,0 +1,34 @@
+{
+  "name":"co-agent-desktop",
+  "version":"8.7.0",
+  "private":true,
+  "type":"module",
+  "main":"dist/main/main/index.js",
+  "dependencies":{
+    "@nut-tree-fork/nut-js":"4.2.6",
+    "electron-store":"10.1.0",
+    "playwright":"1.63.0",
+    "react":"19.0.0",
+    "react-dom":"19.0.0",
+    "screenshot-desktop":"1.15.6",
+    "typescript":"5.7.2",
+    "zod":"3.23.8",
+    "file-type":"file:vendor/file-type",
+    "image-size":"file:vendor/image-size"
+  },
+  "scripts":{
+    "start":"electron .",
+    "build":"npm run fetch:ffmpeg && npm run verify",
+    "verify":"node scripts/verify-build.mjs",
+    "dist:win":"electron-builder --win nsis",
+    "dist":"electron-builder",
+    "fetch:ffmpeg":"node scripts/fetch-ffmpeg.mjs",
+    "release:preflight":"node scripts/release-preflight.mjs",
+    "critical-check":"node scripts/critical-check.mjs"
+  },
+  "devDependencies":{
+    "electron":"42.11.3",
+    "electron-builder":"26.15.3"
+  },
+  "overrides":{"file-type":"file:vendor/file-type","image-size":"file:vendor/image-size","uuid":"11.1.1"}
+}
