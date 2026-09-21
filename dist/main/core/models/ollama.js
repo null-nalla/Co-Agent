@@ -1,0 +1,16 @@
+import { fetchWithTimeout } from '../../shared/net/fetch.js';
+import os from 'node:os';
+import { resourceGovernor } from '../resources/governor.js';
+let modelQueue=Promise.resolve();
+const RAM_LIMIT_MB=3072;const MIN_FREE_MB=3072;
+function modelProfile(model){if(/gemma4:e2b/i.test(model))return{estimatedRamMb:2850,ctx:2048,predict:768,temperature:0.7,topP:0.95,topK:64};if(/ui-tars/i.test(model))return{estimatedRamMb:2200,ctx:2048,predict:256,temperature:0.05};return{estimatedRamMb:2300,ctx:1536,predict:768,temperature:0.2}}
+function estimatedRamMb(model){return modelProfile(model).estimatedRamMb}
+async function withModelSlot(fn){const run=modelQueue.then(fn,fn);modelQueue=run.catch(()=>undefined);return run}
+function assertBudget(model){const free=os.freemem()/1048576;const estimated=estimatedRamMb(model);if(estimated>RAM_LIMIT_MB)throw new Error(`Model ${model} exceeds Co-Agent's 3 GB runtime budget.`);if(free<MIN_FREE_MB)throw new Error(`Co-Agent paused local model work because only ${Math.round(free)} MB RAM is free. Free memory and retry.`)}
+export class OllamaClient{
+ base;model;constructor(base,model){this.base=base;this.model=model}
+ async tags(){const r=await fetchWithTimeout(`${this.base.replace(/\/$/,'')}/api/tags`,{},5000);if(!r.ok)throw new Error(`Ollama ${r.status}`);return r.json()}
+ async chat(messages,options={}){return withModelSlot(async()=>{assertBudget(this.model);const profile=modelProfile(this.model);if(!resourceGovernor.acquireModel(profile.estimatedRamMb))throw new Error('Another heavy local model task is already active.');try{const payload={model:this.model,messages,stream:false,keep_alive:options.keepAlive??'0s',options:{...(options.options||{}),num_ctx:Math.min(Number(options.options?.num_ctx||profile.ctx),2048),num_predict:Math.min(Number(options.options?.num_predict||profile.predict),1024),temperature:Number(options.options?.temperature??profile.temperature),...(Number.isFinite(Number(options.options?.top_p))?{top_p:Number(options.options.top_p)}:(profile.topP?{top_p:profile.topP}:{})),...(Number.isFinite(Number(options.options?.top_k))?{top_k:Number(options.options.top_k)}:(profile.topK?{top_k:profile.topK}:{}))},...(options.json?{format:'json'}:{})};const controller=options.signal?undefined:new AbortController();const timer=controller?setTimeout(()=>controller.abort(),Number(process.env.CO_AGENT_MODEL_TIMEOUT_MS||180000)):undefined;try{const r=await fetchWithTimeout(`${this.base.replace(/\/$/,'')}/api/chat`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload),signal:options.signal||controller?.signal});if(!r.ok)throw new Error(`Ollama ${r.status}`);const x=await r.json();const content=String(x.message?.content||'');if(options.onToken&&content)options.onToken(content);return content}catch(e){if(e?.name==='AbortError')throw new Error(`Ollama request timed out after ${process.env.CO_AGENT_MODEL_TIMEOUT_MS||180000}ms`);throw e}finally{if(timer)clearTimeout(timer)}}finally{resourceGovernor.releaseModel()}})}
+ async vision(messages,imageBase64,options={}){const withImage=messages.map((m,i)=>i===messages.length-1?{...m,images:[imageBase64]}:m);return this.chat(withImage,options)}
+}
+export { RAM_LIMIT_MB };
