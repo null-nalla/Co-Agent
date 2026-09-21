@@ -1,0 +1,36 @@
+appId: com.coagent.desktop
+productName: Co-Agent
+artifactName: Co-Agent-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - assets/**
+  - "!assets/runtime/ffmpeg/**"
+  - dist-server/**
+  - package.json
+asar: true
+asarUnpack:
+  - node_modules/@nut-tree-fork/**
+  - node_modules/screenshot-desktop/**
+win:
+  target:
+    - nsis
+    - portable
+linux:
+  target:
+    - AppImage
+  category: Utility
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+extraResources:
+  - from: assets/runtime/ffmpeg
+    to: ffmpeg
+    filter:
+      - "**/*"
+  - from: licenses
+    to: licenses
+    filter:
+      - "**/*"
